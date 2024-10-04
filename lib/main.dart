@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:math';
+
+import 'package:flutter/widgets.dart';
 
 void main() {
   runApp(const MyApp());
@@ -46,11 +49,15 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   int player = 1;
   int computer = 2;
+  int coin = 0;
+  int playerWinning = 0;
+  int computerWinning = 0;
   bool isComputerTurn = false;
   List board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
   Timer? _timer;
-  int time = 60;
+  int time = 30;
   String status = 'Your turn';
+
   startTime() {
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (time > 0) {
@@ -59,15 +66,59 @@ class _GameScreenState extends State<GameScreen> {
         });
       } else {
         timer.cancel();
+        bool playerWon = playerWinning > computerWinning;
+        showDialog(
+            context: context,
+            builder: (Context) => AlertDialog(
+                  title: Text('Game Over'),
+                  content: Container(
+                      height: 300,
+                      child: Column(
+                        children: [
+                          Image.asset('images/money.png'),
+                          Text(
+                            'Coin: $coin',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      )),
+                ));
       }
     });
   }
 
   runComputer() async {
-    await Future.delayed(Duration(milliseconds: 200), () {
+    if (hasWon(player, board)) {
+      setState(() {
+        playerWinning++;
+        board = List.filled(9, 0);
+        coin += 20;
+      });
+    }
+
+    await Future.delayed(Duration(milliseconds: 200), () async {
       int? blocking;
       int? winning;
       int? normal;
+      List avaliableMove = [];
+
+      if (playerWinning >= 5) {
+        _timer?.cancel();
+        showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+                  title: Text('You Won'),
+                ));
+      }
+
+      if (board.every((element) => element != 0)) {
+        setState(() {
+          board = List.filled(9, 0);
+        });
+      }
 
       for (int i = 0; i < board.length; i++) {
         List demoBoard = List.from(board);
@@ -85,16 +136,52 @@ class _GameScreenState extends State<GameScreen> {
           blocking = i;
           //log(i.toString());
         }
-        normal = i;
+
+        avaliableMove.add(i);
       }
 
       int move = winning ?? blocking ?? normal ?? 0;
+      if (winning != null) {
+        makeMove(computer, winning);
+      } else if (blocking != null) {
+        makeMove(computer, blocking);
+      } else {
+        if (avaliableMove.isNotEmpty) {
+          var random = Random().nextInt(avaliableMove.length);
+          var randomMove = avaliableMove[random];
+          makeMove(computer, randomMove);
+        }
+      }
 
-      makeMove(computer, move);
+      if (hasWon(computer, board)) {
+        Future.delayed(Duration(milliseconds: 200), () {
+          setState(() {
+            board = List.filled(9, 0);
+            computerWinning++;
+          });
+        });
+      }
 
-      setState(() {
-        board[move] = computer;
-      });
+      if (computerWinning >= 5) {
+        _timer?.cancel();
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Center(
+              child: Text('computer Won'),
+            ),
+          ),
+        );
+      }
+
+      if (board.every((element) => element != 0)) {
+        await Future.delayed(Duration(milliseconds: 200), () {
+          setState(() {
+            board = List.filled(9, 0);
+          });
+        });
+      }
+
       if (hasWon(player, board)) {
         showDialog(
           context: context,
@@ -124,7 +211,7 @@ class _GameScreenState extends State<GameScreen> {
     //246
 
     return board[0] == player && board[1] == player && board[2] == player ||
-        board[4] == player && board[5] == player ||
+        board[3] == player && board[4] == player && board[5] == player ||
         board[6] == player && board[7] == player && board[8] == player ||
         board[0] == player && board[1] == player && board[2] == player ||
         board[3] == player && board[4] == player && board[5] == player ||
@@ -172,7 +259,17 @@ class _GameScreenState extends State<GameScreen> {
             style: TextStyle(fontSize: 20),
           ),
         ),
+        title: Row(
+          children: [
+            Text('P: $playerWinning'),
+            Text('C: $computerWinning'),
+          ],
+        ),
         actions: [
+          Text(
+            '$coin',
+            style: TextStyle(fontSize: 25),
+          ),
           IconButton(
               onPressed: () {
                 if (_timer != null && !_timer!.isActive) {
@@ -192,6 +289,9 @@ class _GameScreenState extends State<GameScreen> {
                 setState(() {
                   board = List.filled(9, 0);
                   time = 60;
+                  playerWinning = 0;
+                  computerWinning = 0;
+                  coin = 0;
                 });
                 startTime();
               },
@@ -201,7 +301,7 @@ class _GameScreenState extends State<GameScreen> {
       body: Column(
         children: [
           Container(
-              height: MediaQuery.of(context).size.height * 0.45,
+              height: MediaQuery.of(context).size.height * 0.5,
               child: GridView(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
@@ -209,7 +309,7 @@ class _GameScreenState extends State<GameScreen> {
                     mainAxisSpacing: 10,
                   ),
                   children: [
-                    for (int i = 0; i < 9; i++)
+                    for (int i = 0; i < board.length; i++)
                       GestureDetector(
                         onTap: () async {
                           if (!isComputerTurn) {
